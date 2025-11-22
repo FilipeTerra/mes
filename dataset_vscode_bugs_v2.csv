@@ -1,0 +1,582 @@
+﻿ID,Data,Linguagem,Arquivo,Descricao_Problema,Link_PR,Codigo_Diff_Patch
+106873,2020-09-16,ts,src/vs/editor/browser/controller/textAreaInput.ts,"Fixes: https://github.com/microsoft/vscode/issues/106392
+
+In Firefox when inserting Emoji's using the macOS emoji input or using the compositor for characters with accents è, ë, î, etc. the character is inserted twice. Additionally, when adding an accented character the base character was also inserted.
+
+Examples:
+
+🏅 inserts 🏅🏅
+è inserts eèè
+
+This change does two things:
+
+- It removes `this._onType.fire(typeInput);` from the compositionupdate event listener. If you are in the middle of a composition there is no need to fire off the event. This change fixes the unaccented character from being inserted. `è` no longer inserts `eè`.
+
+- In the composition end function `browser.isFirefox` is added to the conditional that resets this._textAreaState to the value of the text area. This is needed as the insert of the composition is handled by L294. The textarea needs to be updated correctly when the compositions ends.
+
+Tested in Firefox (Windows 10, Ubuntu, macOS), Safari (macOS), Chrome (macOS), Edge Legacy (Windows 10), Edge (Windows 10)
+
+<!-- Thank you for submitting a Pull Request. Please: 
+* Read our Pull Request guidelines:
+  https://github.com/Microsoft/vscode/wiki/How-to-Contribute#pull-requests.
+* Associate an issue with the Pull Request.
+* Ensure that the code is up-to-date with the `master` branch.
+* Include a description of the proposed changes and how to test them. 
+-->
+
+This PR fixes #
+",https://github.com/microsoft/vscode/pull/106873,"@@ -297,7 +297,7 @@ export class TextAreaInput extends Disposable {
+ 
+ 			// Due to isEdgeOrIE (where the textarea was not cleared initially) and isChrome (the textarea is not updated correctly when composition ends)
+ 			// we cannot assume the text at the end consists only of the composited text
+-			if (browser.isEdge || browser.isChrome) {
++			if (browser.isEdge || browser.isChrome|| browser.isFirefox) {
+ 				this._textAreaState = TextAreaState.readFromTextArea(this._textArea);
+ 			}
+ "
+103349,2020-07-26,ts,src/vs/platform/theme/common/tokenClassificationRegistry.ts,"Replaces {} with Object.create(null), so that accessing the object can have properties defined that conflict with the prototype names.  `constructor`, `toString` are examples.
+
+This PR fixes #103104
+",https://github.com/microsoft/vscode/pull/103349,"@@ -314,7 +314,7 @@ class TokenClassificationRegistry implements ITokenClassificationRegistry {
+ 	constructor() {
+ 		this.tokenTypeById = {};
+ 		this.tokenModifierById = {};
+-		this.typeHierarchy = {};
++		this.typeHierarchy = Object.create(null);
+ 	}
+ 
+ 	public registerTokenType(id: string, description: string, superType?: string, deprecationMessage?: string): void {
+@@ -331,7 +331,7 @@ class TokenClassificationRegistry implements ITokenClassificationRegistry {
+ 
+ 		const stylingSchemeEntry = getStylingSchemeEntry(description, deprecationMessage);
+ 		this.tokenStylingSchema.properties[id] = stylingSchemeEntry;
+-		this.typeHierarchy = {};
++		this.typeHierarchy = Object.create(null);
+ 	}
+ 
+ 	public registerTokenModifier(id: string, description: string, deprecationMessage?: string): void {
+@@ -398,7 +398,7 @@ class TokenClassificationRegistry implements ITokenClassificationRegistry {
+ 	public deregisterTokenType(id: string): void {
+ 		delete this.tokenTypeById[id];
+ 		delete this.tokenStylingSchema.properties[id];
+-		this.typeHierarchy = {};
++		this.typeHierarchy = Object.create(null);
+ 	}
+ 
+ 	public deregisterTokenModifier(id: string): void {"
+82150,2019-10-09,ts,src/vs/base/common/resourceTree.ts,"Fixes #82149
+
+I simply forgot to update the `delete` method in the `ResourceTree` model in the fix (https://github.com/microsoft/vscode/commit/c850f0716e6193d0a11d48c81b29c8aff6147d1b) for https://github.com/microsoft/vscode/issues/81798.",https://github.com/microsoft/vscode/pull/82150,"@@ -159,22 +159,22 @@ export class ResourceTree<T extends NonNullable<any>, C> {
+ 
+ 	delete(uri: URI): T | undefined {
+ 		const key = relativePath(this.root.uri, uri) || uri.fsPath;
+-		const parts = key.split(/[\\\/]/).filter(p => !!p);
+-		return this._delete(this.root, parts, 0);
++		const iterator = new PathIterator(false).reset(key);
++		return this._delete(this.root, iterator);
+ 	}
+ 
+-	private _delete(node: BranchNode<T, C>, parts: string[], index: number): T | undefined {
+-		const name = parts[index];
++	private _delete(node: BranchNode<T, C>, iterator: PathIterator): T | undefined {
++		const name = iterator.value();
+ 		const child = node.get(name);
+ 
+ 		if (!child) {
+ 			return undefined;
+ 		}
+ 
+ 		// not at end
+-		if (index < parts.length - 1) {
++		if (iterator.hasNext()) {
+ 			if (child instanceof BranchNode) {
+-				const result = this._delete(child, parts, index + 1);
++				const result = this._delete(child, iterator.next());
+ 
+ 				if (typeof result !== 'undefined' && child.size === 0) {
+ 					node.delete(name);"
+74430,2019-05-27,ts,src/vs/base/browser/ui/selectBox/selectBoxCustom.ts,"Restores title attribute for custom SelectBox.
+Fixes: #73844 
+
+Note: Screen readers will typically announce both the aria-label and the title attribute.
+Given these are always the same it is redundant but, unavoidable without some unknown
+method to disable reading the title.  
+",https://github.com/microsoft/vscode/pull/74430,"@@ -191,6 +191,9 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 				index: e.target.selectedIndex,
+ 				selected: e.target.value
+ 			});
++			if (!!this.options[this.selected] && !!this.options[this.selected].text) {
++				this.selectElement.title = this.options[this.selected].text;
++			}
+ 		}));
+ 
+ 		// Have to implement both keyboard and mouse controllers to handle disabled options
+@@ -282,6 +285,9 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 		}
+ 
+ 		this.selectElement.selectedIndex = this.selected;
++		if (!!this.options[this.selected] && !!this.options[this.selected].text) {
++			this.selectElement.title = this.options[this.selected].text;
++		}
+ 	}
+ 
+ 	public setAriaLabel(label: string): void {
+@@ -395,7 +401,7 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 			let listBackground = this.styles.selectListBackground ? this.styles.selectListBackground.toString() : background;
+ 			this.selectDropDownListContainer.style.backgroundColor = listBackground;
+ 			this.selectionDetailsPane.style.backgroundColor = listBackground;
+-			const optionsBorder = this.styles.focusBorder ? this.styles.focusBorder.toString() : null;
++			const optionsBorder = this.styles.focusBorder ? this.styles.focusBorder.toString() : '';
+ 			this.selectDropDownContainer.style.outlineColor = optionsBorder;
+ 			this.selectDropDownContainer.style.outlineOffset = '-1px';
+ 		}
+@@ -798,7 +804,11 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 				this._onDidSelect.fire({
+ 					index: this.selectElement.selectedIndex,
+ 					selected: this.options[this.selected].text
++
+ 				});
++				if (!!this.options[this.selected] && !!this.options[this.selected].text) {
++					this.selectElement.title = this.options[this.selected].text;
++				}
+ 			}
+ 
+ 			this.hideSelectDropDown(true);
+@@ -891,6 +901,9 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 				index: this.selectElement.selectedIndex,
+ 				selected: this.options[this.selected].text
+ 			});
++			if (!!this.options[this.selected] && !!this.options[this.selected].text) {
++				this.selectElement.title = this.options[this.selected].text;
++			}
+ 		}
+ 
+ 		this.hideSelectDropDown(true);"
+64271,2018-12-04,ts,src/vs/base/browser/ui/selectBox/selectBoxCustom.ts,"Fixes: #64265 - assuming unintentional
+
+Reset _sticky flag to false - true prevents dropdown from closing on loss of focus- debugging flag
+
+",https://github.com/microsoft/vscode/pull/64271,"@@ -114,7 +114,7 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 	private selectionDetailsPane: HTMLElement;
+ 	private _skipLayout: boolean = false;
+ 
+-	private _sticky: boolean = true; // for dev purposes only
++	private _sticky: boolean = false; // for dev purposes only
+ 
+ 	constructor(options: string[], selected: number, contextViewProvider: IContextViewProvider, styles: ISelectBoxStyles, selectBoxOptions?: ISelectBoxOptions) {
+ "
+62504,2018-11-02,ts,src/vs/base/browser/ui/selectBox/selectBoxNative.ts,"@chrmarti - thanks again for catching
+@isidorn 
+@Tyriar 
+If anyone of you can review and merge, I am following new procedures not merging myself as non-MS team member.
+Thanks!
+
+
+
+- Assign explicit role=combobox to native select box (select)
+- Electron 2.x incorrect assignment issue
+- Voiceover also affected
+- Equally addresses same issue with Debug Configurations label
+- Does not affect SelectBox within new settings , already addressed there
+
+See: #60929
+
+![image](https://user-images.githubusercontent.com/25272315/47939923-4f93b480-debf-11e8-945a-2c938e635ba9.png)
+",https://github.com/microsoft/vscode/pull/62504,"@@ -27,6 +27,13 @@ export class SelectBoxNative implements ISelectBoxDelegate {
+ 		this.selectBoxOptions = selectBoxOptions || Object.create(null);
+ 
+ 		this.selectElement = document.createElement('select');
++
++		// Workaround for Electron 2.x
++		// Native select should not require explicit role attribute, however, Electron 2.x
++		// incorrectly exposes select as menuItem which interferes with labeling and results
++		// in the unlabeled not been read.  Electron 3 appears to fix.
++		this.selectElement.setAttribute('role', 'combobox');
++
+ 		this.selectElement.className = 'monaco-select-box';
+ 
+ 		if (typeof this.selectBoxOptions.ariaLabel === 'string') {"
+61412,2018-10-20,ts,src/vs/base/browser/ui/selectBox/selectBoxCustom.ts,"- Electron 2.x incorrectly exposes select as role=menuItem 
+- Screen readers do not read aria-label
+- Remove ""title"" attribute on select , avoids duplicate reading
+
+- Explicit role should not be required under Electron 3",https://github.com/microsoft/vscode/pull/61412,"@@ -129,6 +129,13 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 		}
+ 
+ 		this.selectElement = document.createElement('select');
++
++		// Workaround for Electron 2.x
++		// Native select should not require explicit role attribute, however, Electron 2.x
++		// incorrectly exposes select as menuItem which interferes with labeling and results
++		// in the unlabeled not been read.  Electron 3 appears to fix.
++		this.selectElement.setAttribute('role', 'combobox');
++
+ 		// Use custom CSS vars for padding calculation
+ 		this.selectElement.className = 'monaco-select-box monaco-select-box-dropdown-padding';
+ 
+@@ -192,7 +199,6 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 		// Parent native select keyboard listeners
+ 
+ 		this.toDispose.push(dom.addStandardDisposableListener(this.selectElement, 'change', (e) => {
+-			this.selectElement.title = e.target.value;
+ 			this.selected = e.target.selectedIndex;
+ 			this._onDidSelect.fire({
+ 				index: e.target.selectedIndex,
+@@ -301,7 +307,6 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 		}
+ 
+ 		this.selectElement.selectedIndex = this.selected;
+-		this.selectElement.title = this.options[this.selected];
+ 	}
+ 
+ 	public setAriaLabel(label: string): void {
+@@ -821,7 +826,7 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 
+ 				this._onDidSelect.fire({
+ 					index: this.selectElement.selectedIndex,
+-					selected: this.selectElement.title
++					selected: this.options[this.selected]
+ 				});
+ 			}
+ 
+@@ -913,7 +918,7 @@ export class SelectBoxList implements ISelectBoxDelegate, IListVirtualDelegate<I
+ 			this._currentSelection = this.selected;
+ 			this._onDidSelect.fire({
+ 				index: this.selectElement.selectedIndex,
+-				selected: this.selectElement.title
++				selected: this.options[this.selected]
+ 			});
+ 		}
+ "
+58982,2018-09-19,ts,src/vs/base/browser/ui/selectBox/selectBoxCustom.ts,"- make sure disabled option is skipped, including last option",https://github.com/microsoft/vscode/pull/58982,"@@ -150,7 +150,6 @@ export class SelectBoxList implements ISelectBoxDelegate, IVirtualDelegate<ISele
+ 
+ 		this.selected = selected || 0;
+ 
+-		// CDL check
+ 		if (options) {
+ 			this.setOptions(options, selected);
+ 		}
+@@ -260,13 +259,19 @@ export class SelectBoxList implements ISelectBoxDelegate, IVirtualDelegate<ISele
+ 			this.options.forEach((option) => {
+ 				this.selectElement.add(this.createOption(option, i, disabled === i++));
+ 			});
+-		}
+ 
+-		if (selected !== undefined) {
+-			this.select(selected);
+-			// Set current = selected since this is not necessarily a user exit
+-			this._currentSelection = this.selected;
++			if (selected !== undefined) {
++				this.select(selected);
++				// Set current = selected since this is not necessarily a user exit
++				this._currentSelection = this.selected;
++			}
++
++			if (disabled !== undefined) {
++				this.disabledOptionIndex = disabled;
++			}
+ 		}
++
++
+ 	}
+ 
+ 
+@@ -928,6 +933,8 @@ export class SelectBoxList implements ISelectBoxDelegate, IVirtualDelegate<ISele
+ 			// Skip disabled options
+ 			if ((this.selected + 1) === this.disabledOptionIndex && this.options.length > this.selected + 2) {
+ 				this.selected += 2;
++			} else if ((this.selected + 1) === this.disabledOptionIndex) {
++				return;
+ 			} else {
+ 				this.selected++;
+ 			}"
+57184,2018-08-24,ts,src/vs/workbench/parts/preferences/browser/settingsTree.ts,Call on change handler when checkboxes indirectly toggled,https://github.com/microsoft/vscode/pull/57184,"@@ -684,6 +684,7 @@ export class SettingsRenderer implements ITreeRenderer {
+ 			// Toggle target checkbox
+ 			if (targetElement.tagName.toLowerCase() !== 'a' && targetId === template.checkbox.domNode.id) {
+ 				template.checkbox.checked = template.checkbox.checked ? false : true;
++				template.onChange(checkbox.checked);
+ 			}
+ 			DOM.EventHelper.stop(e);
+ 		}));"
+57103,2018-08-23,ts,src/vs/workbench/parts/preferences/browser/settingsTree.ts,"@roblourens 
+
+- Added disposable listener for clicking on description label
+- Programmatically toggle checkbox
+- Ignore clicks on link elements
+
+Note: 
+I realized we have to choose which cursor type we want when over description .
+You recently made the text selectable with the text cursor also.  
+So right now the text does not look clickable.",https://github.com/microsoft/vscode/pull/57103,"@@ -673,6 +673,21 @@ export class SettingsRenderer implements ITreeRenderer {
+ 				template.onChange(checkbox.checked);
+ 			}
+ 		}));
++
++		// Need to listen for mouse clicks on description and toggle checkbox - use target ID for safety
++		// Also have to ignore embedded links - too buried to stop propagation
++		toDispose.push(DOM.addDisposableListener(descriptionElement, DOM.EventType.MOUSE_DOWN, (e) => {
++			const targetElement = <HTMLElement>e.toElement;
++			const targetId = descriptionElement.getAttribute('checkboxLabelTargetId');
++
++			// Make sure we are not a link and the target ID matches
++			// Toggle target checkbox
++			if (targetElement.tagName !== 'A' && targetId === template.checkbox.domNode.id) {
++				template.checkbox.checked = template.checkbox.checked ? false : true;
++			}
++			DOM.EventHelper.stop(e);
++		}));
++
+ 		checkbox.domNode.classList.add(SettingsRenderer.CONTROL_CLASS);
+ 		const toolbar = this.renderSettingToolbar(container);
+ 		toDispose.push(toolbar);
+@@ -917,6 +932,10 @@ export class SettingsRenderer implements ITreeRenderer {
+ 			template.descriptionElement.innerText = element.description;
+ 		}
+ 
++		// Add checkbox target to description clickable and able to toggle checkbox
++		const checkbox_id = (element.displayCategory + '_' + element.displayLabel).replace(/ /g, '_') + '_Item';
++		template.descriptionElement.setAttribute('checkboxLabelTargetId', checkbox_id);
++
+ 		if (element.overriddenScopeList.length) {
+ 			let otherOverridesLabel = element.isConfigured ?
+ 				localize('alsoConfiguredIn', ""Also modified in"") :
+@@ -988,9 +1007,9 @@ export class SettingsRenderer implements ITreeRenderer {
+ 		// Labels will not be read on descendent input elements of the parent treeitem
+ 		// unless defined as role=treeitem and indirect aria-labelledby approach
+ 		// TODO: Determine method to normally label input items with value read last
+-		template.checkbox.domNode.setAttribute('id', id + 'item');
++		template.checkbox.domNode.setAttribute('id', id + '_Item');
+ 		template.checkbox.domNode.setAttribute('role', 'treeitem');
+-		template.checkbox.domNode.setAttribute('aria-labelledby', id + 'item ' + id);
++		template.checkbox.domNode.setAttribute('aria-labelledby', id + '_Item ' + id);
+ 
+ 	}
+ "
+54435,2018-07-17,ts,src/vs/base/browser/ui/selectBox/selectBoxNative.ts,"check property, not option",https://github.com/microsoft/vscode/pull/54435,"@@ -14,6 +14,7 @@ import { isMacintosh } from 'vs/base/common/platform';
+ export class SelectBoxNative implements ISelectBoxDelegate {
+ 
+ 	private selectElement: HTMLSelectElement;
++	private selectBoxOptions: ISelectBoxOptions;
+ 	private options: string[];
+ 	private selected: number;
+ 	private readonly _onDidSelect: Emitter<ISelectData>;
+@@ -23,12 +24,13 @@ export class SelectBoxNative implements ISelectBoxDelegate {
+ 	constructor(options: string[], selected: number, styles: ISelectBoxStyles, selectBoxOptions?: ISelectBoxOptions) {
+ 
+ 		this.toDispose = [];
++		this.selectBoxOptions = selectBoxOptions || Object.create(null);
+ 
+ 		this.selectElement = document.createElement('select');
+ 		this.selectElement.className = 'monaco-select-box';
+ 
+-		if (typeof selectBoxOptions.ariaLabel === 'string') {
+-			this.selectElement.setAttribute('aria-label', selectBoxOptions.ariaLabel);
++		if (typeof this.selectBoxOptions.ariaLabel === 'string') {
++			this.selectElement.setAttribute('aria-label', this.selectBoxOptions.ariaLabel);
+ 		}
+ 
+ 		this._onDidSelect = new Emitter<ISelectData>();"
+54321,2018-07-14,ts,src/vs/base/browser/ui/selectBox/selectBoxCustom.ts,"#54296 
+
+Catch and ignore exception on duplicate child removal when base contextView has already
+disposed and removed child on focus change.",https://github.com/microsoft/vscode/pull/54321,"@@ -417,7 +417,15 @@ export class SelectBoxList implements ISelectBoxDelegate, IVirtualDelegate<ISele
+ 
+ 		this.layoutSelectDropDown();
+ 		return {
+-			dispose: () => container.removeChild(this.selectDropDownContainer) // remove to take out the CSS rules we add
++			dispose: () => {
++				// contextView will dispose itself if moving from one View to another
++				try {
++					container.removeChild(this.selectDropDownContainer); // remove to take out the CSS rules we add
++				}
++				catch (error) {
++					// Ignore, removed already by change of focus
++				}
++			}
+ 		};
+ 	}
+ "
+54320,2018-07-14,ts,src/vs/base/browser/ui/selectBox/selectBoxCustom.ts,"Fixes: #54292
+
+Calculation for drop-down needs to use offsetWidth on the parent select to not include
+margins.",https://github.com/microsoft/vscode/pull/54320,"@@ -489,8 +489,8 @@ export class SelectBoxList implements ISelectBoxDelegate, IVirtualDelegate<ISele
+ 			// Set final container height after adjustments
+ 			this.selectDropDownContainer.style.height = (listHeight + verticalPadding) + 'px';
+ 
+-			// Determine optimal width - min(longest option), opt(parent select), max(ContextView controlled)
+-			const selectWidth = dom.getTotalWidth(this.selectElement);
++			// Determine optimal width - min(longest option), opt(parent select, excluding margins), max(ContextView controlled)
++			const selectWidth = this.selectElement.offsetWidth;
+ 			const selectMinWidth = this.setWidthControlElement(this.widthControlElement);
+ 			const selectOptimalWidth = Math.max(selectMinWidth, Math.round(selectWidth)).toString() + 'px';
+ "
+51224,2018-06-06,ts,src/vs/code/electron-main/app.ts,"Fixes #40505
+
+@bpasero @alexandrudima @sandy081 Make sure the changes makes sense.",https://github.com/microsoft/vscode/pull/51224,"@@ -494,8 +494,8 @@ export class CodeApplication {
+ 		this.historyMainService.updateWindowsJumpList();
+ 		this.historyMainService.onRecentlyOpenedChange(() => this.historyMainService.updateWindowsJumpList());
+ 
+-		// Start shared process here
+-		this.sharedProcess.spawn();
++		// Start shared process after a while
++		TPromise.timeout(3000).then(() => this.sharedProcess.spawn());
+ 	}
+ 
+ 	private dispose(): void {"
+49684,2018-05-11,ts,src/vs/platform/jsonschemas/common/jsonContributionRegistry.ts,"Change logs:
+
+**1) /vscode/src/vs/platform/jsonschemas/common/jsonContributionRegistry.ts：Remove interface `IJSONContributionRegistryEvent`.**
+
+Why?
+
+**This event was created in 2015, and it's never referred by any other modules, functions……ect, when you are looking for its references in Visual Studio Code.**",https://github.com/microsoft/vscode/pull/49684,"@@ -38,9 +38,7 @@ export interface IJSONContributionRegistry {
+ 	getSchemaContributions(): ISchemaContributions;
+ }
+ 
+-export interface IJSONContributionRegistryEvent {
+ 
+-}
+ 
+ function normalizeId(id: string) {
+ 	if (id.length > 0 && id.charAt(id.length - 1) === '#') {"
+49613,2018-05-10,ts,src/vs/workbench/services/themes/electron-browser/fileIconThemeData.ts,"There is a spell error in src/vs/workbench/services/themes/electron-browser/fileIconThemeData.ts
+
+font-weigth => font-weight",https://github.com/microsoft/vscode/pull/49613,"@@ -300,7 +300,7 @@ function _processIconThemeDocument(id: string, iconThemeDocumentPath: string, ic
+ 	if (Array.isArray(fonts)) {
+ 		fonts.forEach(font => {
+ 			let src = font.src.map(l => `url('${resolvePath(l.path)}') format('${l.format}')`).join(', ');
+-			cssRules.push(`@font-face { src: ${src}; font-family: '${font.id}'; font-weigth: ${font.weight}; font-style: ${font.style}; }`);
++			cssRules.push(`@font-face { src: ${src}; font-family: '${font.id}'; font-weight: ${font.weight}; font-style: ${font.style}; }`);
+ 		});
+ 		cssRules.push(`.show-file-icons .file-icon::before, .show-file-icons .folder-icon::before, .show-file-icons .rootfolder-icon::before { font-family: '${fonts[0].id}'; font-size: ${fonts[0].size || '150%'}}`);
+ 	}
+@@ -335,4 +335,4 @@ function _processIconThemeDocument(id: string, iconThemeDocumentPath: string, ic
+ }
+ function escapeCSS(str: string) {
+ 	return window['CSS'].escape(str);
+-}
+\ No newline at end of file
++}"
+47052,2018-04-01,ts,extensions/git/src/commands.ts,fixes #46860,https://github.com/microsoft/vscode/pull/47052,"@@ -1205,7 +1205,7 @@ export class CommandCenter {
+ 
+ 			const message = localize('confirm force delete branch', ""The branch '{0}' is not fully merged. Delete anyway?"", name);
+ 			const yes = localize('delete branch', ""Delete Branch"");
+-			const pick = await window.showWarningMessage(message, yes);
++			const pick = await window.showWarningMessage(message, { modal: true }, yes);
+ 
+ 			if (pick === yes) {
+ 				await run(true);"
+37017,2017-10-27,ts,src/vs/editor/editor.main.ts,"For some reason,  I have to compile the monaco-editor by myself.
+Recently I update the monaco and found that the editor crash while loading the monaco.
+It seems that we need polyfill the `promise` after we set the `global`.
+
+<img width=""540"" alt=""2017-10-27 11 45 47"" src=""https://user-images.githubusercontent.com/12891758/32087135-6fa9c114-ba9f-11e7-83ca-030e75b18772.png"">
+
+",https://github.com/microsoft/vscode/pull/37017,"@@ -19,6 +19,9 @@ import { createMonacoEditorAPI } from 'vs/editor/standalone/browser/standaloneEd
+ import { createMonacoLanguagesAPI } from 'vs/editor/standalone/browser/standaloneLanguages';
+ import { EDITOR_DEFAULTS, WrappingIndent } from 'vs/editor/common/config/editorOptions';
+ 
++var global: any = self;
++global.monaco = exports;
++
+ // When missing, polyfill the native promise
+ // with our winjs-based polyfill
+ import { PolyfillPromise } from 'vs/base/common/winjs.polyfill.promise';
+@@ -41,9 +44,6 @@ for (let prop in base) {
+ exports.editor = createMonacoEditorAPI();
+ exports.languages = createMonacoLanguagesAPI();
+ 
+-var global: any = self;
+-global.monaco = exports;
+-
+ if (typeof global.require !== 'undefined' && typeof global.require.config === 'function') {
+ 	global.require.config({
+ 		ignoreDuplicateModules: ["
+4323,2016-03-16,ts,src/vs/languages/php/common/php.contribution.ts,"I am not responsible of this stup_d_t\* but unfortunately these extensions are very common…
+",https://github.com/microsoft/vscode/pull/4323,"@@ -8,9 +8,9 @@ import {ModesRegistry} from 'vs/editor/common/modes/modesRegistry';
+ 
+ ModesRegistry.registerCompatMode({
+ 	id: 'php',
+-	extensions: ['.php', '.phtml', '.ctp'],
++	extensions: ['.php', '.php4', '.php5', '.phtml', '.ctp'],
+ 	aliases: ['PHP', 'php'],
+ 	mimetypes: ['application/x-php'],
+ 	moduleId: 'vs/languages/php/common/php',
+ 	ctorName: 'PHPMode'
+-});
+\ No newline at end of file
++});"
+4322,2016-03-16,ts,src/vs/languages/php/common/php.ts,"Please, see http://php.net/generator.
+",https://github.com/microsoft/vscode/pull/4322,"@@ -68,7 +68,7 @@ var isKeyword = objects.createKeywordMatcher([
+ 	'try', 'true', 'use', 'var', 'while', 'xor',
+ 	'die', 'echo', 'empty', 'exit', 'eval',
+ 	'include', 'include_once', 'isset', 'list', 'require',
+-	'require_once', 'return', 'print', 'unset',
++	'require_once', 'return', 'print', 'unset', 'yield',
+ 	'__construct'
+ ]);
+ "
+3531,2016-02-28,js,src/vs/languages/css/common/services/browsers.js,"Simplify its description.
+
+Fixes #3524
+
+---
+
+Waiting for Feb release to be finalized before pushing
+",https://github.com/microsoft/vscode/pull/3531,"@@ -3,7 +3,7 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ // file generated from css-schema.xml using css-exclude_generate_browserjs.js
+-define([""require"", ""exports""], function(require, exports) {	
++define([""require"", ""exports""], function(require, exports) {
+ 
+ exports.data ={
+ 	""css"": {
+@@ -8421,6 +8421,10 @@ exports.data ={
+ 					{
+ 						""name"": ""overline""
+ 					},
++					{
++						""name"": ""none"",
++						""desc"": ""Produces no text decoration.""
++					},
+ 					{
+ 						""name"": ""solid""
+ 					},
+@@ -8443,7 +8447,7 @@ exports.data ={
+ 					},
+ 					{
+ 						""name"": ""none"",
+-						""desc"": ""Neither produces nor inhibits text decoration.""
++						""desc"": ""Produces no text decoration.""
+ 					},
+ 					{
+ 						""name"": ""overline""
+@@ -8469,8 +8473,7 @@ exports.data ={
+ 						""name"": ""double""
+ 					},
+ 					{
+-						""name"": ""none"",
+-						""desc"": ""Produces no line.""
++						""name"": ""none""
+ 					},
+ 					{
+ 						""name"": ""solid"""
+3150,2016-02-19,ts,src/vs/workbench/electron-main/env.ts,"Opening code using `code ..`, `code ../..`  was opening the wrong directory
+since trailing '.' characters were being trimmed by the launch code.
+
+Fixes #3127 
+
+---
+
+@bpasero I'm assuming that the trimming was added for Windows, just wanted to make sure that was the intent. Or can we remove it?
+",https://github.com/microsoft/vscode/pull/3150,"@@ -316,9 +316,6 @@ function massagePath(path: string): string {
+ 	// Trim whitespaces
+ 	path = strings.trim(strings.trim(path, ' '), '\t');
+ 
+-	// Remove trailing dots
+-	path = strings.rtrim(path, '.');
+-
+ 	return path;
+ }
+ "
